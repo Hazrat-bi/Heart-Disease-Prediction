@@ -1,0 +1,543 @@
+#importing important libraries
+
+import sklearn
+import numpy as np 
+import pandas as pd
+import os
+import matplotlib
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+import seaborn as sns
+import random
+import torch
+
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import *
+import tensorflow as tf
+from tensorflow.compat.v1 import ConfigProto
+from tensorflow.compat.v1 import InteractiveSession
+
+config = ConfigProto()
+config.gpu_options.allow_growth = True
+session = InteractiveSession(config=config)
+
+from torch.utils.data import Dataset, DataLoader
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.utils.data import Dataset, DataLoader
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+import torch.nn as nn
+
+import torch.nn.functional as F
+import itertools
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from tqdm import tqdm
+from sklearn.metrics import precision_recall_curve
+
+#Loading dataset
+mit_train_df = pd.read_csv("D:/Heart disease paper/dataset/mitbih_test.csv", header=None)
+mit_test_df = pd.read_csv("D:/Heart disease paper/dataset/mitbih_test.csv", header=None)
+
+print(mit_train_df.shape)
+print(mit_test_df.shape)
+
+#combining the data
+mit_df=pd.concat([mit_train_df, mit_test_df], axis=0)
+mit_df.shape
+
+print(mit_df[mit_df.columns[-1]].unique())
+mit_df.iloc[:, 187] = mit_df.iloc[:, 187].map({0:0,1:1,2:1,3:1,4:1})
+df = pd.concat([mit_df, ptb_df], axis=0)
+
+equilibre=mit_df[187].value_counts()
+print(equilibre)
+
+df=mit_df
+
+#Spliting the dataset
+train_df, test_df = train_test_split(mit_df, test_size=0.3, stratify=mit_df[187], random_state=42)
+
+train_df.shape, test_df.shape
+
+#Defining model1
+def return_model1():
+    input_tens = tf.keras.Input(shape=(187,2,1))
+    x = tf.keras.layers.Conv2D(256, kernel_size=(10,2), strides=(5,1),padding='valid')(input_tens)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.Dropout(rate=0.5)(x)
+    x = tf.keras.layers.Conv2D(512, kernel_size=(5,1), padding='valid')(x)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.Dropout(rate=0.5)(x)
+    x = tf.keras.layers.Conv2D(512, kernel_size=(5,1), padding='valid')(x)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.Dropout(rate=0.5)(x)
+    x = tf.keras.layers.Conv2D(128, kernel_size=(5,1), padding='valid')(x)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.Dropout(rate=0.5)(x)
+    x = tf.keras.layers.Conv2D(64, kernel_size=(5,1), padding='valid')(x)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.GlobalAveragePooling2D()(x)
+    x = tf.keras.layers.Dense(2, activation="softmax")(x)
+    model = tf.keras.Model(inputs=input_tens, outputs=x)
+    model.compile(optimizer=tf.keras.optimizers.Adam(), loss=tf.keras.losses.SparseCategoricalCrossentropy(), metrics=["accuracy"])
+    print(model.summary())
+    return model
+ model1 = return_model1()
+
+#For saving best model
+checkpoint_path_best = "./best_acc_v01.ckpt"
+cp_callback_best = tf.keras.callbacks.ModelCheckpoint(checkpoint_path_best,monitor="val_accuracy",save_weights_only=True,verbose=1,save_best_only=True)
+
+hist_ptb=model1.fit(x_train,y_train, epochs=100, batch_size=128, validation_data=(x_test,y_test),callbacks=[cp_callback_best])
+
+#Model results
+def return_result(model, x_train, x_test, y_train, y_test):
+    y_pred = model.predict(x_test)
+    train_pred = model.predict(x_train)
+    pred_list=[]
+    for x in y_pred:
+        pred_list.append(np.argmax(x))
+    train_pred_list=[]
+    for x in train_pred:
+        train_pred_list.append(np.argmax(x))
+    test_mat = confusion_matrix(y_test, pred_list)
+    train_mat = confusion_matrix(y_train, train_pred_list)
+    print("In train")
+    print(accuracy_score(y_train, train_pred_list))
+    print(train_mat)
+    print("In test")
+    print(accuracy_score(y_test, pred_list))
+    print(test_mat)
+
+df1 = pd.DataFrame(hist_ptb.history)
+df1.to_csv("train_1.csv", index=False)
+
+#drwa Accuracy history
+def plot(s):
+
+    with plt.style.context(s):
+        print(s)
+        fig, ax = plt.subplots(figsize=(12, 6))
+        plt.plot(df1["accuracy"],  marker='d', label="Training Acc")
+        plt.plot(df1["val_accuracy"],  marker='d', label="Validation Acc")
+        plt.xticks(np.arange(0, 101, 10.0),fontsize=10,fontweight="bold")
+        plt.yticks(fontsize=10,fontweight="bold")
+        plt.ylabel('accuracy', fontsize=10,fontweight="bold")
+        plt.xlabel('epochs', fontsize=10,fontweight="bold")
+        plt.title("Accuracy of 1st approach using CNN with imbalanced dataset")
+        plt.legend()
+        #plt.savefig(f"auc_history.svg",format="svg",bbox_inches='tight', pad_inches=0.2)
+        #plt.savefig(f"auc_history.png", format="png",bbox_inches='tight', pad_inches=0.2) 
+        plt.show()
+        print()
+        
+for s in plt.style.available:
+    plot(s);
+
+#drawa loss history
+def plot(s):
+
+    with plt.style.context(s):
+        print(s)
+        fig, ax = plt.subplots(figsize=(12, 6))
+        plt.plot(df1["loss"],  marker='d', label="Training Loss")
+        plt.plot(df1["val_loss"],  marker='d', label="Validation Loss")
+        plt.xticks(np.arange(0, 101, 10.0),fontsize=10,fontweight="bold")
+        plt.yticks(fontsize=10,fontweight="bold")
+        plt.ylabel('loss', fontsize=10,fontweight="bold")
+        plt.xlabel('epochs', fontsize=10,fontweight="bold")
+        plt.title("Loss history of 1st approach using CNN with imbalanced dataset")
+        plt.legend()
+        #plt.savefig(f"auc_history.svg",format="svg",bbox_inches='tight', pad_inches=0.2)
+        #plt.savefig(f"auc_history.png", format="png",bbox_inches='tight', pad_inches=0.2) 
+        plt.show()
+        print()
+        
+for s in plt.style.available:
+    plot(s);
+
+
+#Model 2 IMBALANCED DATASET
+def return_model2():
+    input_tens = tf.keras.Input(shape=(187,2,1))
+    x = tf.keras.layers.Conv2D(256, kernel_size=(10,2), strides=(5,1),padding='valid')(input_tens)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.Dropout(rate=0.5)(x)
+    x = tf.keras.layers.Conv2D(512, kernel_size=(5,1), padding='valid')(x)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.Dropout(rate=0.5)(x)
+    x = tf.keras.layers.Conv2D(512, kernel_size=(5,1), padding='valid')(x)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.Dropout(rate=0.5)(x)
+    x = tf.keras.layers.Reshape((x.shape[1], x.shape[3]))(x)
+    x = tf.keras.layers.LSTM(64)(x)
+    x = tf.keras.layers.Dense(2, activation="softmax")(x)
+    model = tf.keras.Model(inputs=input_tens, outputs=x)
+    model.compile(optimizer=tf.keras.optimizers.Adam(), loss=tf.keras.losses.SparseCategoricalCrossentropy(), metrics=["accuracy"])
+    print(model.summary())
+    return model
+
+model2 = return_model2()
+
+checkpoint_path_best2 = "./best_acc_v02.ckpt"
+cp_callback_best2 = tf.keras.callbacks.ModelCheckpoint(checkpoint_path_best2, monitor="val_accuracy", save_weights_only=True, verbose=1, save_best_only=True)
+
+hist_2=model2.fit(x_train,y_train, epochs=100, batch_size=128, validation_data=(x_val,y_val), callbacks=[cp_callback_best2])
+
+df2 = pd.DataFrame(hist_2.history)
+df2.to_csv("train_2.csv", index=False)
+
+def plot(s):
+
+    with plt.style.context(s):
+        print(s)
+        fig, ax = plt.subplots(figsize=(12, 6))
+        plt.plot(df2["accuracy"],  marker='d', label="Training Acc")
+        plt.plot(df2["val_accuracy"],  marker='d', label="Validation Acc")
+        plt.xticks(np.arange(0,101, 10.0))
+        plt.ylabel('accuracy', fontsize=10)
+        plt.xlabel('epochs', fontsize=10)
+        plt.title("Accuracy history of 2nd approach using CNN-LSTM with imbalanced dataset")
+        plt.legend()
+        #plt.savefig(f"auc_history.svg",format="svg",bbox_inches='tight', pad_inches=0.2)
+        #plt.savefig(f"auc_history.png", format="png",bbox_inches='tight', pad_inches=0.2) 
+        plt.show()
+        print()
+        
+for s in plt.style.available:
+    plot(s);
+
+#Loss history
+def plot(s):
+
+    with plt.style.context(s):
+        print(s)
+        fig, ax = plt.subplots(figsize=(12, 6))
+        plt.plot(df2["loss"],  marker='d', label="Training Loss")
+        plt.plot(df2["val_loss"],  marker='d', label="Validation Loss")
+        plt.xticks(np.arange(0, 101, 10.0),fontsize=10,fontweight="bold")
+        plt.yticks(fontsize=10,fontweight="bold")
+        plt.ylabel('loss', fontsize=10,fontweight="bold")
+        plt.xlabel('epochs', fontsize=10,fontweight="bold")
+        plt.title("Loss history of 2nd approach using CNN-LSTM with imbalanced dataset")
+        plt.legend()
+        #plt.savefig(f"auc_history.svg",format="svg",bbox_inches='tight', pad_inches=0.2)
+        #plt.savefig(f"auc_history.png", format="png",bbox_inches='tight', pad_inches=0.2) 
+        plt.show()
+        print()
+        
+for s in plt.style.available:
+    plot(s);
+
+return_result(model1, x_train=x_train, x_test=x_val, y_train=y_train, y_test=y_val)
+
+#ENSEMBLE
+model1.load_weights(checkpoint_path_best)
+model2.load_weights(checkpoint_path_best2)
+
+return_result(model1, x_train=x_train, x_test=x_val, y_train=y_train, y_test=y_val)
+return_result(model2, x_train=x_train, x_test=x_val, y_train=y_train, y_test=y_val)
+
+test_input = np.array(test_df[test_df.columns[0:-1]], dtype=np.float32)
+test_target = np.array(test_df[test_df.columns[-1:]], dtype=np.float32)
+
+test_input = return_merge_diff_table(df=test_input, diff_dur=[1])
+
+print(test_input.shape, test_target.shape)
+
+pred_1 = model1.predict(test_input)
+pred_2 = model2.predict(test_input)
+pred_tot1 = pred_1
+
+pred_idx_list=[]
+for pred in pred_tot1:
+    pred_idx_list.append(np.argmax(pred))
+    
+pred_idx_arr = np.array(pred_idx_list, dtype=np.float32)
+
+print(accuracy_score(test_target, pred_idx_arr))
+print(confusion_matrix(test_target, pred_idx_arr))
+
+pred_tot2 = pred_2
+
+pred_idx_list=[]
+for pred in pred_tot2:
+    pred_idx_list.append(np.argmax(pred))
+    
+pred_idx_arr = np.array(pred_idx_list, dtype=np.float32)
+
+print(accuracy_score(test_target, pred_idx_arr))
+print(confusion_matrix(test_target, pred_idx_arr))
+
+pred_tot = (pred_1+pred_2)/2
+
+pred_idx_list=[]
+for pred in pred_tot:
+    pred_idx_list.append(np.argmax(pred))
+    
+pred_idx_arr = np.array(pred_idx_list, dtype=np.float32)
+
+print(accuracy_score(test_target, pred_idx_arr))
+print(confusion_matrix(test_target, pred_idx_arr))
+
+# import the SMOTETomek.
+from imblearn.combine import SMOTETomek
+from imblearn.over_sampling import SMOTE
+# create the  object with the desired sampling strategy.
+smotemek = SMOTETomek(sampling_strategy='auto')
+
+# fit the object to our training data.
+x_train_smt, y_train_smt= SMOTE().fit_resample(train_x, train_y)
+#x_train_smt, y_train_smt = smotemek.fit_sample(train_x, train_y)
+
+# Return difference array
+def return_diff_array_table(array, dur):
+for idx in range(array.shape[1]-dur):
+    before_col = array[:,idx]
+    after_col = array[:,idx+dur]
+    new_col = ((after_col - before_col)+1)/2
+    new_col = new_col.reshape(-1,1)
+    if idx == 0:
+        new_table = new_col
+    else :
+        new_table = np.concatenate((new_table, new_col), axis=1)
+#For concat add zero padding
+  padding_array = np.zeros(shape=(array.shape[0],dur))
+    new_table = np.concatenate((padding_array, new_table), axis=1)
+      return new_table
+#Concat
+def return_merge_diff_table(df, diff_dur):
+fin_table = df.reshape(-1,187,1,1)
+  for dur in diff_dur:
+    temp_table = return_diff_array_table(df, dur)
+    fin_table = np.concatenate((fin_table, temp_table.reshape(-1,187,1,1)), axis=2)
+return fin_table
+
+#Use "stratify" option
+x_train, x_val, y_train, y_val = train_test_split(x_train_smt, y_train_smt, test_size=0.15, stratify=y_train_smt)
+
+#Add Data
+x_train = return_merge_diff_table(df=x_train, diff_dur=[1])
+x_val = return_merge_diff_table(df=x_val, diff_dur=[1])
+
+print(x_train.shape, y_train.shape, x_val.shape, y_val.shape)
+
+#For see a model's result
+def return_result(model, x_train, x_test, y_train, y_test):
+    y_pred = model.predict(x_test)
+    train_pred = model.predict(x_train)
+    pred_list=[]
+    for x in y_pred:
+        pred_list.append(np.argmax(x))
+    train_pred_list=[]
+    for x in train_pred:
+        train_pred_list.append(np.argmax(x))
+    test_mat = confusion_matrix(y_test, pred_list)
+    train_mat = confusion_matrix(y_train, train_pred_list)
+    print("In train")
+    print(accuracy_score(y_train, train_pred_list))
+    print(train_mat)
+    print("In test")
+    print(accuracy_score(y_test, pred_list))
+    print(test_mat)
+
+#Model 3 with balanced dataset
+def return_model3():  
+    input_tens = tf.keras.Input(shape=(187,2,1))
+    x = tf.keras.layers.Conv2D(256, kernel_size=(10,2), strides=(5,1),padding='valid')(input_tens)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.Dropout(rate=0.5)(x)
+    x = tf.keras.layers.Conv2D(512, kernel_size=(5,1), padding='valid')(x)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.Dropout(rate=0.5)(x)
+    x = tf.keras.layers.Conv2D(512, kernel_size=(5,1), padding='valid')(x)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.Dropout(rate=0.5)(x)
+    x = tf.keras.layers.Conv2D(128, kernel_size=(5,1), padding='valid')(x)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.Dropout(rate=0.5)(x)
+    x = tf.keras.layers.Conv2D(64, kernel_size=(5,1), padding='valid')(x)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.GlobalAveragePooling2D()(x)
+    x = tf.keras.layers.Dense(2, activation="softmax")(x)
+    model = tf.keras.Model(inputs=input_tens, outputs=x)
+    model.compile(optimizer=tf.keras.optimizers.Adam(), loss=tf.keras.losses.SparseCategoricalCrossentropy(), metrics=["accuracy"])
+    print(model.summary())
+    return model
+model3 = return_model3()
+
+#For saving best model
+checkpoint_path_best3 = "./best_acc_v03.ckpt"
+cp_callback_best3 = tf.keras.callbacks.ModelCheckpoint(checkpoint_path_best3,monitor="val_accuracy",save_weights_only=True,verbose=1,save_best_only=True)
+
+hist3=model3.fit(x_train,y_train, epochs=100, batch_size=128, validation_data=(x_val,y_val),callbacks=[cp_callback_best3])
+
+return_result(model3, x_train=x_train, x_test=x_val, y_train=y_train, y_test=y_val)
+
+df3 = pd.DataFrame(hist3.history)
+df3.to_csv("train3.csv", index=False)
+
+#Acc history
+def plot(s):
+
+    with plt.style.context(s):
+        print(s)
+        fig, ax = plt.subplots(figsize=(12, 6))
+        plt.plot(df3["accuracy"],  marker='d', label="Training Acc")
+        plt.plot(df3["val_accuracy"],  marker='d', label="Validation Acc")
+        plt.xticks(np.arange(0,101, 10.0))
+        plt.ylabel('accuracy', fontsize=10)
+        plt.xlabel('epochs', fontsize=10)
+        plt.title("Accuracy history of 3rd approach using CNN with balanced dataset")
+        plt.legend()
+        #plt.savefig(f"auc_history.svg",format="svg",bbox_inches='tight', pad_inches=0.2)
+        #plt.savefig(f"auc_history.png", format="png",bbox_inches='tight', pad_inches=0.2) 
+        plt.show()
+        print()
+        
+for s in plt.style.available:
+    plot(s);
+
+#loss history
+def plot(s):
+
+    with plt.style.context(s):
+        print(s)
+        fig, ax = plt.subplots(figsize=(12, 6))
+        plt.plot(df3["loss"],  marker='d', label="Training Loss")
+        plt.plot(df3["val_loss"],  marker='d', label="Validation Loss")
+        plt.xticks(np.arange(0, 101, 10.0),fontsize=10,fontweight="bold")
+        plt.yticks(fontsize=10,fontweight="bold")
+        plt.ylabel('loss', fontsize=10,fontweight="bold")
+        plt.xlabel('epochs', fontsize=10,fontweight="bold")
+        plt.title("Loss history of 3rd approach using CNN with balanced dataset")
+        plt.legend()
+        #plt.savefig(f"auc_history.svg",format="svg",bbox_inches='tight', pad_inches=0.2)
+        #plt.savefig(f"auc_history.png", format="png",bbox_inches='tight', pad_inches=0.2) 
+        plt.show()
+        print()
+        
+for s in plt.style.available:
+    plot(s);
+
+model3.load_weights(checkpoint_path_best3)
+#model4.load_weights(checkpoint_path_best2)
+
+#return_result(model1, x_train=x_train, x_test=x_val, y_train=y_train, y_test=y_val)
+#return_result(model4, x_train=x_train, x_test=x_val, y_train=y_train, y_test=y_val)
+
+test_input = np.array(test_df[test_df.columns[0:-1]], dtype=np.float32)
+test_target = np.array(test_df[test_df.columns[-1:]], dtype=np.float32)
+
+test_input = return_merge_diff_table(df=test_input, diff_dur=[1])
+
+print(test_input.shape, test_target.shape)
+
+pred_3 = model3.predict(test_input)
+pred_tot3 = pred_3
+
+pred_idx_list=[]
+for pred in pred_tot3:
+    pred_idx_list.append(np.argmax(pred))
+    
+pred_idx_arr = np.array(pred_idx_list, dtype=np.float32)
+print(accuracy_score(test_target, pred_idx_arr))
+print(confusion_matrix(test_target, pred_idx_arr))
+
+#Model 4 with balanced dataset
+def return_model4():
+    input_tens = tf.keras.Input(shape=(187,2,1))
+    x = tf.keras.layers.Conv2D(256, kernel_size=(10,2), strides=(5,1),padding='valid')(input_tens)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.Dropout(rate=0.5)(x)
+    x = tf.keras.layers.Conv2D(512, kernel_size=(5,1), padding='valid')(x)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.Dropout(rate=0.5)(x)
+    x = tf.keras.layers.Conv2D(512, kernel_size=(5,1), padding='valid')(x)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.Dropout(rate=0.5)(x)
+    x = tf.keras.layers.Reshape((x.shape[1], x.shape[3]))(x)
+    x = tf.keras.layers.LSTM(64)(x)
+    x = tf.keras.layers.Dense(2, activation="softmax")(x)
+    model = tf.keras.Model(inputs=input_tens, outputs=x)
+    model.compile(optimizer=tf.keras.optimizers.Adam(), loss=tf.keras.losses.SparseCategoricalCrossentropy(), metrics=["accuracy"])
+    print(model.summary())
+    return model
+model4=return_model4()
+
+#For saving best model
+checkpoint_path_best4 = "./best_acc_v04.ckpt"
+cp_callback_best4 = tf.keras.callbacks.ModelCheckpoint(checkpoint_path_best4, monitor="val_accuracy", save_weights_only=True, verbose=1, save_best_only=True)
+
+hist4=model4.fit(x_train,y_train, epochs=100, batch_size=128, validation_data=(x_val,y_val), callbacks=[cp_callback_best4])
+
+df4 = pd.DataFrame(hist4.history)
+df4.to_csv("train_4.csv", index=False)
+
+#Acc history
+def plot(s):
+
+    with plt.style.context(s):
+        print(s)
+        fig, ax = plt.subplots(figsize=(12, 6))
+        plt.plot(df3["accuracy"],  marker='o', label="Training Acc")
+        plt.plot(df3["val_accuracy"],  marker='o', label="Validation Acc")
+        plt.xticks(np.arange(0, 101, 10.0), fontweight='bold')
+        plt.yticks(fontweight='bold')
+        plt.ylabel('Accuracy', fontsize=10,fontweight='bold' )
+        plt.xlabel('epochs', fontsize=10, fontweight='bold')
+        plt.title("Accuracy history of 4th approach using CNN-LSTM with balanced dataset")
+        plt.legend()
+        #plt.savefig(f"auc_history.svg",format="svg",bbox_inches='tight', pad_inches=0.2)
+        #plt.savefig(f"auc_history.png", format="png",bbox_inches='tight', pad_inches=0.2) 
+        plt.show()
+        print()
+        
+for s in plt.style.available:
+    plot(s);
+
+pred_tot4 = pred_4
+
+pred_idx_list=[]
+for pred in pred_tot4:
+    pred_idx_list.append(np.argmax(pred))
+    
+pred_idx_arr = np.array(pred_idx_list, dtype=np.float32)
+
+print(accuracy_score(test_target, pred_idx_arr))
+print(confusion_matrix(test_target, pred_idx_arr))
+
+pred_tot = (pred_3+pred_4)/2
+
+pred_idx_list=[]
+for pred in pred_tot:
+    pred_idx_list.append(np.argmax(pred))
+    
+pred_idx_arr = np.array(pred_idx_list, dtype=np.float32)
+print(accuracy_score(test_target, pred_idx_arr))
+print(confusion_matrix(test_target, pred_idx_arr))
+
+pred_tot_f = (pred_1+pred_2+pred_3+pred_4)/4
+
+pred_idx_list=[]
+for pred in pred_tot_f:
+    pred_idx_list.append(np.argmax(pred))
+    
+pred_idx_arr = np.array(pred_idx_list, dtype=np.float32)
+print(accuracy_score(test_target, pred_idx_arr))
+print(confusion_matrix(test_target, pred_idx_arr))
